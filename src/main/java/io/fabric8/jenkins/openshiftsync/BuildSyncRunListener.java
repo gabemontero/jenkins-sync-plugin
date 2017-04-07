@@ -24,6 +24,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import hudson.Extension;
 import hudson.PluginManager;
+import hudson.console.ConsoleNote;
 import hudson.model.Result;
 import hudson.model.Run;
 import hudson.model.TaskListener;
@@ -40,8 +41,14 @@ import org.kohsuke.stapler.DataBoundConstructor;
 
 import javax.annotation.Nonnull;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.Reader;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
@@ -72,6 +79,8 @@ public class BuildSyncRunListener extends RunListener<Run> {
   private String namespace;
 
   private transient Set<Run> runsToPoll = new CopyOnWriteArraySet<>();
+  private transient Map<String, List<String>> logsForRuns = new HashMap<String, List<String>>();
+  private transient Map<String, List<String>> logIndexesForRuns = new HashMap<String, List<String>>();
 
   private transient AtomicBoolean timerStarted = new AtomicBoolean(false);
 
@@ -122,6 +131,8 @@ public class BuildSyncRunListener extends RunListener<Run> {
       if (runsToPoll.add(run)) {
         logger.info("starting polling build " + run.getUrl());
       }
+      logsForRuns.put(run.getFullDisplayName(), new ArrayList<String>());
+      logIndexesForRuns.put(run.getFullDisplayName(), new ArrayList<String>());
       checkTimerStarted();
     } else {
       logger.fine("not polling polling build " + run.getUrl() + " as its not a WorkflowJob");
@@ -149,6 +160,8 @@ public class BuildSyncRunListener extends RunListener<Run> {
       logger.info("onCompleted " + run.getUrl());
       maybeScheduleNext(((WorkflowRun) run).getParent());
     }
+    addRunLogs(run);
+    // onFinalized always gets called ... clean up maps then, do one more pass at run logs
     super.onCompleted(run, listener);
   }
 
@@ -160,16 +173,31 @@ public class BuildSyncRunListener extends RunListener<Run> {
       logger.info("onDeleted " + run.getUrl());
       maybeScheduleNext(((WorkflowRun) run).getParent());
     }
+    addRunLogs(run);
+    logsForRuns.remove(run.getFullDisplayName());
+    logIndexesForRuns.remove(run.getFullDisplayName());
     super.onDeleted(run);
   }
 
   @Override
-  public synchronized void onFinalized(Run run) {
+  public synchronized void onFinalized(final Run run) {
     if (shouldPollRun(run)) {
       runsToPoll.remove(run);
       pollRun(run);
       logger.info("onFinalized " + run.getUrl());
     }
+    addRunLogs(run);
+    Runnable task = new SafeTimerTask() {
+        @Override
+        protected void doRun() throws Exception {
+            logger.info("GGM on last log pull, then delete annotations");
+            addRunLogs(run);
+            deleteAnnotations(run);
+            logsForRuns.remove(run.getFullDisplayName());
+            logIndexesForRuns.remove(run.getFullDisplayName());
+        }
+      };
+    Timer.get().schedule(task, 5, TimeUnit.SECONDS);
     super.onFinalized(run);
   }
 
@@ -191,6 +219,8 @@ public class BuildSyncRunListener extends RunListener<Run> {
     } catch (KubernetesClientException e) {
       if (e.getCode() == HttpStatus.SC_UNPROCESSABLE_ENTITY) {
         runsToPoll.remove(run);
+        logsForRuns.remove(run.getFullDisplayName());
+        logIndexesForRuns.remove(run.getFullDisplayName());
         logger.log(WARNING, "Cannot update status: {0}", e.getMessage());
         return;
       }
@@ -294,7 +324,9 @@ public class BuildSyncRunListener extends RunListener<Run> {
         completionTime = formatTimestamp(started + duration);
       }
     }
-
+    
+    addRunLogs(run);
+    
     logger.log(FINE, "Patching build {0}/{1}: setting phase to {2}", new Object[]{cause.getNamespace(), cause.getName(), phase});
     try {
       getAuthenticatedOpenShiftClient().builds().inNamespace(cause.getNamespace()).withName(cause.getName()).edit()
@@ -314,12 +346,83 @@ public class BuildSyncRunListener extends RunListener<Run> {
     } catch (KubernetesClientException e) {
       if (HTTP_NOT_FOUND == e.getCode()) {
         runsToPoll.remove(run);
+        logsForRuns.remove(run.getFullDisplayName());
+        logIndexesForRuns.remove(run.getFullDisplayName());
       } else {
         throw e;
       }
     }
   }
-
+  
+  private void addRunLogs(Run run) {
+      BuildCause cause = (BuildCause) run.getCause(BuildCause.class);
+      if (cause == null) {
+        return;
+      }
+      List<String> existingLogs = logsForRuns.get(run.getFullDisplayName());
+      List<String> indexes = logIndexesForRuns.get(run.getFullDisplayName());
+      List<String> newLogs = new ArrayList<String>();
+      String logString = "";
+      String logIndex = Long.toString(System.nanoTime());
+      indexes.add(logIndex);
+      // FYI, tried hudson.model.Run.getLog(int) and it just didn't work real well
+      if (existingLogs != null) {
+          try {
+              Reader rdr = run.getLogReader();
+              BufferedReader buff = new BufferedReader(rdr);
+              String line = null;
+              while ((line = buff.readLine()) != null) {
+                  line = ConsoleNote.removeNotes(line);
+                  if (!existingLogs.contains(line)) {
+                      newLogs.add(line);
+                      logString = logString + line + "\n";
+                  }
+              }
+              existingLogs.addAll(newLogs);
+              logsForRuns.put(run.getFullDisplayName(), existingLogs);
+              getOpenShiftClient().builds().inNamespace(cause.getNamespace()).withName(cause.getName()).edit()
+              .editMetadata()
+              .addToAnnotations(Constants.OPENSHIFT_ANNOTATIONS_JENKINS_LOG_CONTENT_RAWDATA_PREFIX + logIndex, logString)
+              .endMetadata()
+              .done();
+          } catch (IOException e1) {
+              logger.log(Level.WARNING, "addRunLogs", e1);
+          } catch (KubernetesClientException e) {
+              if (HTTP_NOT_FOUND == e.getCode()) {
+                  runsToPoll.remove(run);
+                  logsForRuns.remove(run.getFullDisplayName());
+              } else {
+                  throw e;
+              }
+          }
+      }
+  }
+  
+  private void deleteAnnotations(Run run) {
+      BuildCause cause = (BuildCause) run.getCause(BuildCause.class);
+      if (cause == null) {
+        logger.info("deleteAnnotation cause null ??");
+        return;
+      }
+      List<String> indexes = logIndexesForRuns.get(run.getFullDisplayName());
+      for (String logIndex : indexes) {
+          try {
+              getOpenShiftClient().builds().inNamespace(cause.getNamespace()).withName(cause.getName()).edit()
+              .editMetadata()
+              .removeFromAnnotations(Constants.OPENSHIFT_ANNOTATIONS_JENKINS_LOG_CONTENT_RAWDATA_PREFIX + logIndex)
+              .endMetadata()
+              .done();
+          } catch (KubernetesClientException e) {
+              if (HTTP_NOT_FOUND == e.getCode()) {
+                  runsToPoll.remove(run);
+                  logsForRuns.remove(run.getFullDisplayName());
+              } else {
+                  throw e;
+              }
+          }
+      }
+  }
+  
   private long getStartTime(Run run) {
     return run.getStartTimeInMillis();
   }
