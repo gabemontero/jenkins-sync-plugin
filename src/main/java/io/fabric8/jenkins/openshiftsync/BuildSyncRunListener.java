@@ -30,6 +30,8 @@ import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.model.listeners.RunListener;
 import hudson.triggers.SafeTimerTask;
+import io.fabric8.kubernetes.api.model.Pod;
+import io.fabric8.kubernetes.api.model.PodList;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.openshift.api.model.Build;
 import jenkins.model.Jenkins;
@@ -42,9 +44,14 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import javax.annotation.Nonnull;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.PipedOutputStream;
 import java.io.Reader;
 import java.lang.reflect.Method;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -190,9 +197,8 @@ public class BuildSyncRunListener extends RunListener<Run> {
     Runnable task = new SafeTimerTask() {
         @Override
         protected void doRun() throws Exception {
-            logger.info("GGM on last log pull, then delete annotations");
             addRunLogs(run);
-            deleteAnnotations(run);
+            //deleteAnnotations(run);
             logsForRuns.remove(run.getFullDisplayName());
             logIndexesForRuns.remove(run.getFullDisplayName());
         }
@@ -380,11 +386,49 @@ public class BuildSyncRunListener extends RunListener<Run> {
               }
               existingLogs.addAll(newLogs);
               logsForRuns.put(run.getFullDisplayName(), existingLogs);
-              getOpenShiftClient().builds().inNamespace(cause.getNamespace()).withName(cause.getName()).edit()
+              
+              PodList podList = getAuthenticatedOpenShiftClient().pods().inNamespace(cause.getNamespace()).list();
+              for (Pod pod : podList.getItems()) {
+                  if (pod.getMetadata().getName().contains(cause.getName())) {
+                      String host = pod.getStatus().getPodIP();
+                      String url = "http://";
+                      URL obj = null;
+                      if (host != null) {
+                          url = url + host + ":9090";
+                          obj = new URL(url);
+                      } else {
+                          return;
+                      }
+                      HttpURLConnection con = (HttpURLConnection) obj.openConnection();
+
+                      //add reuqest header
+                      con.setRequestMethod("POST");
+                      con.setRequestProperty("Accept-Language", "en-US,en;q=0.5");
+
+                      // Send post request
+                      con.setDoOutput(true);
+                      try {
+                          DataOutputStream wr = new DataOutputStream(con.getOutputStream());
+                          wr.writeBytes(logString);
+                          wr.flush();
+                          wr.close();
+                          int responseCode = con.getResponseCode();
+                          if (responseCode != 200) {
+                              logger.log(Level.WARNING, "Got http rc " + responseCode + " on log post to " + url);
+                          }
+
+                      } catch (java.net.ConnectException e) {
+                          if (logger.isLoggable(Level.FINE))
+                              logger.log(Level.FINE, "addRunLogs", e);
+                      }
+
+                  }
+              }
+              /*getAuthenticatedOpenShiftClient().builds().inNamespace(cause.getNamespace()).withName(cause.getName()).edit()
               .editMetadata()
               .addToAnnotations(Constants.OPENSHIFT_ANNOTATIONS_JENKINS_LOG_CONTENT_RAWDATA_PREFIX + logIndex, logString)
               .endMetadata()
-              .done();
+              .done();*/
           } catch (IOException e1) {
               logger.log(Level.WARNING, "addRunLogs", e1);
           } catch (KubernetesClientException e) {
@@ -398,7 +442,7 @@ public class BuildSyncRunListener extends RunListener<Run> {
       }
   }
   
-  private void deleteAnnotations(Run run) {
+  /*private void deleteAnnotations(Run run) {
       BuildCause cause = (BuildCause) run.getCause(BuildCause.class);
       if (cause == null) {
         logger.info("deleteAnnotation cause null ??");
@@ -407,7 +451,7 @@ public class BuildSyncRunListener extends RunListener<Run> {
       List<String> indexes = logIndexesForRuns.get(run.getFullDisplayName());
       for (String logIndex : indexes) {
           try {
-              getOpenShiftClient().builds().inNamespace(cause.getNamespace()).withName(cause.getName()).edit()
+              getAuthenticatedOpenShiftClient().builds().inNamespace(cause.getNamespace()).withName(cause.getName()).edit()
               .editMetadata()
               .removeFromAnnotations(Constants.OPENSHIFT_ANNOTATIONS_JENKINS_LOG_CONTENT_RAWDATA_PREFIX + logIndex)
               .endMetadata()
@@ -421,7 +465,7 @@ public class BuildSyncRunListener extends RunListener<Run> {
               }
           }
       }
-  }
+  }*/
   
   private long getStartTime(Run run) {
     return run.getStartTimeInMillis();
