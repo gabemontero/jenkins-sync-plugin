@@ -47,6 +47,11 @@ public class SecretWatcher extends BaseWatcher {
     }
 
     @Override
+    public int getListIntervalInSeconds() {
+        return GlobalPluginConfiguration.get().getSecretListInterval();
+    }
+
+    @Override
     public Runnable getStartTimerTask() {
         return new SafeTimerTask() {
             @Override
@@ -134,6 +139,9 @@ public class SecretWatcher extends BaseWatcher {
         try {
             switch (action) {
             case ADDED:
+                if (!GlobalPluginConfiguration.get().isSecretWatch()) {
+                    return;
+                }
                 upsertCredential(secret);
                 break;
             case DELETED:

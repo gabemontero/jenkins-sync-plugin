@@ -48,6 +48,11 @@ public class ImageStreamWatcher extends BaseWatcher {
         this.predefinedOpenShiftSlaves.add("nodejs");
     }
 
+    @Override
+    public int getListIntervalInSeconds() {
+        return GlobalPluginConfiguration.get().getImageStreamListInterval();
+    }
+
     public Runnable getStartTimerTask() {
         return new SafeTimerTask() {
             @Override
@@ -114,6 +119,9 @@ public class ImageStreamWatcher extends BaseWatcher {
             String isname = imageStream.getMetadata().getName();
             switch (action) {
             case ADDED:
+                if (!GlobalPluginConfiguration.get().isImageStreamWatch()) {
+                    return;
+                }
                 for (PodTemplate entry : slavesFromIS) {
                     // timer might beat watch event - put call is technically
                     // fine, but

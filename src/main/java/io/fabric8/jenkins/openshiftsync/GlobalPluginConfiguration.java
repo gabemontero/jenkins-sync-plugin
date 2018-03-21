@@ -57,6 +57,18 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 
 	private String skipBranchSuffix;
 
+    private int buildListInterval = 300;
+    private int buildConfigListInterval = 300;
+    private int secretListInterval = 300;
+    private int configMapListInterval = 300;
+    private int imageStreamListInterval = 300;
+    
+    private boolean buildWatch = true;
+    private boolean buildConfigWatch = true;
+    private boolean secretWatch = true;
+    private boolean configMapWatch = true;
+    private boolean imageStreamWatch = true;
+    
 	private transient BuildWatcher buildWatcher;
 
 	private transient BuildConfigWatcher buildConfigWatcher;
@@ -69,7 +81,11 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 
 	@DataBoundConstructor
 	public GlobalPluginConfiguration(boolean enable, String server, String namespace, String credentialsId,
-			String jobNamePattern, String skipOrganizationPrefix, String skipBranchSuffix) {
+			String jobNamePattern, String skipOrganizationPrefix, String skipBranchSuffix,
+			int buildListInterval, int buildConfigListInterval, int configMapListInterval,
+			int secretListInterval, int imageStreamListInterval,
+			boolean buildWatch, boolean buildConfigWatch, boolean configMapWatch,
+			boolean secretWatch, boolean imageStreamWatch) {
 		this.enabled = enable;
 		this.server = server;
 		this.namespaces = StringUtils.isBlank(namespace) ? null : namespace.split(" ");
@@ -77,6 +93,16 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 		this.jobNamePattern = jobNamePattern;
 		this.skipOrganizationPrefix = skipOrganizationPrefix;
 		this.skipBranchSuffix = skipBranchSuffix;
+		this.buildListInterval = buildListInterval;
+		this.buildConfigListInterval = buildConfigListInterval;
+		this.configMapListInterval = configMapListInterval;
+		this.secretListInterval = secretListInterval;
+		this.imageStreamListInterval = imageStreamListInterval;
+		this.buildWatch = buildWatch;
+		this.buildConfigWatch = buildConfigWatch;
+		this.configMapWatch = configMapWatch;
+		this.secretWatch = secretWatch;
+		this.imageStreamWatch = imageStreamWatch;
 		configChange();
 	}
 
@@ -99,6 +125,7 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 	public boolean configure(StaplerRequest req, JSONObject json) throws hudson.model.Descriptor.FormException {
 		req.bindJSON(this, json);
 		configChange();
+		logger.info("GGM bl " + this.buildListInterval + " bw " + this.buildWatch);
 		save();
 		return true;
 	}
@@ -161,7 +188,87 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 		this.skipBranchSuffix = skipBranchSuffix;
 	}
 
-	// https://wiki.jenkins-ci.org/display/JENKINS/Credentials+Plugin
+    public int getBuildListInterval() {
+        return buildListInterval;
+    }
+
+    public void setBuildListInterval(int buildListInterval) {
+        this.buildListInterval = buildListInterval;
+    }
+
+    public int getBuildConfigListInterval() {
+        return buildConfigListInterval;
+    }
+
+    public void setBuildConfigListInterval(int buildConfigListInterval) {
+        this.buildConfigListInterval = buildConfigListInterval;
+    }
+
+    public int getSecretListInterval() {
+        return secretListInterval;
+    }
+
+    public void setSecretListInterval(int secretListInterval) {
+        this.secretListInterval = secretListInterval;
+    }
+
+    public int getConfigMapListInterval() {
+        return configMapListInterval;
+    }
+
+    public void setConfigMapListInterval(int configMapListInterval) {
+        this.configMapListInterval = configMapListInterval;
+    }
+
+    public int getImageStreamListInterval() {
+        return imageStreamListInterval;
+    }
+
+    public void setImageStreamListInterval(int imageStreamListInterval) {
+        this.imageStreamListInterval = imageStreamListInterval;
+    }
+
+    public boolean isBuildWatch() {
+        return buildWatch;
+    }
+
+    public void setBuildWatch(boolean buildWatch) {
+        this.buildWatch = buildWatch;
+    }
+
+    public boolean isBuildConfigWatch() {
+        return buildConfigWatch;
+    }
+
+    public void setBuildConfigWatch(boolean buildConfigWatch) {
+        this.buildConfigWatch = buildConfigWatch;
+    }
+
+    public boolean isSecretWatch() {
+        return secretWatch;
+    }
+
+    public void setSecretWatch(boolean secretWatch) {
+        this.secretWatch = secretWatch;
+    }
+
+    public boolean isConfigMapWatch() {
+        return configMapWatch;
+    }
+
+    public void setConfigMapWatch(boolean configMapWatch) {
+        this.configMapWatch = configMapWatch;
+    }
+
+    public boolean isImageStreamWatch() {
+        return imageStreamWatch;
+    }
+
+    public void setImageStreamWatch(boolean imageStreamWatch) {
+        this.imageStreamWatch = imageStreamWatch;
+    }
+
+    // https://wiki.jenkins-ci.org/display/JENKINS/Credentials+Plugin
 	// http://javadoc.jenkins-ci.org/credentials/com/cloudbees/plugins/credentials/common/AbstractIdCredentialsListBoxModel.html
 	// https://github.com/jenkinsci/kubernetes-plugin/blob/master/src/main/java/org/csanchez/jenkins/plugins/kubernetes/KubernetesCloud.java
 	public static ListBoxModel doFillCredentialsIdItems(String credentialsId) {

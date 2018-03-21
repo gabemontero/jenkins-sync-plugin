@@ -95,6 +95,11 @@ public class BuildConfigWatcher extends BaseWatcher {
         super(namespaces);
     }
 
+    @Override
+    public int getListIntervalInSeconds() {
+        return GlobalPluginConfiguration.get().getBuildConfigListInterval();
+    }
+
     public Runnable getStartTimerTask() {
         return new SafeTimerTask() {
             @Override
@@ -165,6 +170,9 @@ public class BuildConfigWatcher extends BaseWatcher {
         try {
             switch (action) {
             case ADDED:
+                if (!GlobalPluginConfiguration.get().isBuildConfigWatch()) {
+                    return;
+                }
                 upsertJob(buildConfig);
                 break;
             case DELETED:

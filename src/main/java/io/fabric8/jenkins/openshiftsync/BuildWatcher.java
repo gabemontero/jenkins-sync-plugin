@@ -81,6 +81,11 @@ public class BuildWatcher extends BaseWatcher {
     }
 
     @Override
+    public int getListIntervalInSeconds() {
+        return GlobalPluginConfiguration.get().getBuildListInterval();
+    }
+
+    @Override
     public Runnable getStartTimerTask() {
         return new SafeTimerTask() {
             @Override
@@ -157,6 +162,9 @@ public class BuildWatcher extends BaseWatcher {
         try {
             switch (action) {
             case ADDED:
+                if (!GlobalPluginConfiguration.get().isBuildWatch()) {
+                    return;
+                }
                 addEventToJenkinsJobRun(build);
                 break;
             case MODIFIED:

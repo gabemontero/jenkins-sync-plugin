@@ -50,6 +50,11 @@ public class ConfigMapWatcher extends BaseWatcher {
         this.trackedConfigMaps = new ConcurrentHashMap<>();
     }
 
+    @Override
+    public int getListIntervalInSeconds() {
+        return GlobalPluginConfiguration.get().getConfigMapListInterval();
+    }
+
     public Runnable getStartTimerTask() {
         return new SafeTimerTask() {
             @Override
@@ -111,6 +116,9 @@ public class ConfigMapWatcher extends BaseWatcher {
         try {
             switch (action) {
             case ADDED:
+                if (!GlobalPluginConfiguration.get().isConfigMapWatch()) {
+                    return;
+                }
                 if (containsSlave(configMap)) {
                     List<PodTemplate> templates = podTemplatesFromConfigMap(configMap);
                     trackedConfigMaps.put(configMap.getMetadata().getUid(),
