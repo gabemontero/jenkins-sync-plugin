@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
@@ -108,6 +109,10 @@ public class BuildWatcher extends BaseWatcher {
                                 .inNamespace(namespace)
                                 .withField(OPENSHIFT_BUILD_STATUS_FIELD,
                                         BuildPhases.NEW).list();
+                        if (newBuilds != null && newBuilds.getItems() != null)
+                            logger.info("GGM the new build list query returned a sample of size " + newBuilds.getItems().size());
+                        else
+                            logger.info("GGM the new build list query got a null response");
                         onInitialBuilds(newBuilds);
                         logger.fine("handled Build resources");
                     } catch (Exception e) {
@@ -364,18 +369,14 @@ public class BuildWatcher extends BaseWatcher {
         buildsWithNoBCList.remove(build);
     }
 
-    private static synchronized void clearNoBCList() {
-        buildsWithNoBCList.clear();
-    }
-
     // trigger any builds whose watch events arrived before the
     // corresponding build config watch events
     public static synchronized void flushBuildsWithNoBCList() {
-        HashSet<Build> clone = (HashSet<Build>) buildsWithNoBCList.clone();
-        clearNoBCList();
-        for (Build build : clone) {
+        Iterator<Build> iter = buildsWithNoBCList.iterator();
+        while (iter.hasNext()) {
+            Build build = iter.next();
             WorkflowJob job = getJobFromBuild(build);
-            if (job != null)
+            if (job != null) {
                 try {
                     logger.info("triggering job run for previously skipped build "
                             + build.getMetadata().getName());
@@ -383,8 +384,8 @@ public class BuildWatcher extends BaseWatcher {
                 } catch (IOException e) {
                     logger.log(Level.WARNING, "flushCachedBuilds", e);
                 }
-            else
-                addBuildToNoBCList(build);
+                iter.remove();
+            }
         }
 
     }
