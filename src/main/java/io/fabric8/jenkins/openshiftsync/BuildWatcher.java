@@ -28,6 +28,7 @@ import jenkins.model.Jenkins;
 import jenkins.security.NotReallyRoleSensitiveCallable;
 
 import org.apache.commons.lang.StringUtils;
+import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.jenkinsci.plugins.workflow.job.WorkflowJob;
 import org.jenkinsci.plugins.workflow.job.WorkflowRun;
 
@@ -74,7 +75,7 @@ public class BuildWatcher extends BaseWatcher {
     // when both are created in a simultaneous fashion, there is an up to 5
     // minute delay
     // before the job run gets kicked off
-    private static final HashSet<Build> buildsWithNoBCList = new HashSet<Build>();
+    private static final ConcurrentHashSet<Build> buildsWithNoBCList = new ConcurrentHashSet<Build>();
 
     @SuppressFBWarnings("EI_EXPOSE_REP2")
     public BuildWatcher(String[] namespaces) {
@@ -358,36 +359,49 @@ public class BuildWatcher extends BaseWatcher {
         return false;
     }
 
-    public static synchronized void addBuildToNoBCList(Build build) {
+    private static void addBuildToNoBCList(Build build) {
         // should have been caught upstack, but just in case since public method
         if (!OpenShiftUtils.isPipelineStrategyBuild(build))
             return;
         buildsWithNoBCList.add(build);
     }
 
-    private static synchronized void removeBuildFromNoBCList(Build build) {
+    private static void removeBuildFromNoBCList(Build build) {
         buildsWithNoBCList.remove(build);
     }
 
     // trigger any builds whose watch events arrived before the
     // corresponding build config watch events
-    public static synchronized void flushBuildsWithNoBCList() {
-        Iterator<Build> iter = buildsWithNoBCList.iterator();
-        while (iter.hasNext()) {
-            Build build = iter.next();
-            WorkflowJob job = getJobFromBuild(build);
-            if (job != null) {
-                try {
-                    logger.info("triggering job run for previously skipped build "
-                            + build.getMetadata().getName());
-                    triggerJob(job, build);
-                } catch (IOException e) {
-                    logger.log(Level.WARNING, "flushCachedBuilds", e);
-                }
-                iter.remove();
+    public static void flushBuildsWithNoBCList() {
+        boolean anyRemoveFailures = false;
+        for (Build build : buildsWithNoBCList) {
+          WorkflowJob job = getJobFromBuild(build);
+          if (job != null) {
+            try {
+              logger.info("triggering job run for previously skipped build "
+                + build.getMetadata().getName());
+              triggerJob(job, build);
+            } catch (IOException e) {
+              logger.log(Level.WARNING, "flushBuildsWithNoBCList", e);
             }
+            try {
+              removeBuildFromNoBCList(build);
+            } catch (Throwable t) {
+                // TODO
+                // concurrent mod exceptions are not suppose to occur
+                // with concurrent hash set; this try/catch with log 
+                // and the anyRemoveFailures post processing is a bit
+                // of safety paranoia until this proves to be true
+                // over extended usage ... probably can remove at some
+                // point
+                anyRemoveFailures = true;
+                logger.log(Level.WARNING, "flushBuildsWithNoBCList", t);
+            }
+          }
         }
-
+        if (anyRemoveFailures && buildsWithNoBCList.size() > 0) {
+            buildsWithNoBCList.clear();
+        }
     }
 
     // innerDeleteEventToJenkinsJobRun is the actual delete logic at the heart
