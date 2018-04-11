@@ -72,34 +72,36 @@ public class SecretWatcher extends BaseWatcher {
                     } catch (Exception e) {
                         logger.log(SEVERE, "Failed to load Secrets: " + e, e);
                     }
-                    try {
-                        String resourceVersion = "0";
-                        if (secrets == null) {
-                            logger.warning("Unable to get secret list; impacts resource version used for watch");
-                        } else {
-                            resourceVersion = secrets.getMetadata()
-                                    .getResourceVersion();
-                        }
-                        synchronized(SecretWatcher.this) {
-                            if (watches.get(namespace) == null) {
-                                logger.info("creating Secret watch for namespace "
-                                        + namespace + " and resource version"
-                                        + resourceVersion);
-                                watches.put(
-                                        namespace,
-                                        getAuthenticatedOpenShiftClient()
-                                        .secrets()
-                                        .inNamespace(namespace)
-                                        .withLabel(Constants.OPENSHIFT_LABELS_SECRET_CREDENTIAL_SYNC,
-                                                Constants.VALUE_SECRET_SYNC)
-                                                .withResourceVersion(
-                                                        resourceVersion)
-                                                        .watch(new WatcherCallback<Secret>(SecretWatcher.this,
-                                                                namespace)));
+                    if (GlobalPluginConfiguration.get().isSecretWatch()) {
+                        try {
+                            String resourceVersion = "0";
+                            if (secrets == null) {
+                                logger.warning("Unable to get secret list; impacts resource version used for watch");
+                            } else {
+                                resourceVersion = secrets.getMetadata()
+                                        .getResourceVersion();
                             }
+                            synchronized(SecretWatcher.this) {
+                                if (watches.get(namespace) == null) {
+                                    logger.info("creating Secret watch for namespace "
+                                            + namespace + " and resource version"
+                                            + resourceVersion);
+                                    watches.put(
+                                            namespace,
+                                            getAuthenticatedOpenShiftClient()
+                                            .secrets()
+                                            .inNamespace(namespace)
+                                            .withLabel(Constants.OPENSHIFT_LABELS_SECRET_CREDENTIAL_SYNC,
+                                                    Constants.VALUE_SECRET_SYNC)
+                                                    .withResourceVersion(
+                                                            resourceVersion)
+                                                            .watch(new WatcherCallback<Secret>(SecretWatcher.this,
+                                                                    namespace)));
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.log(SEVERE, "Failed to load Secrets: " + e, e);
                         }
-                    } catch (Exception e) {
-                        logger.log(SEVERE, "Failed to load Secrets: " + e, e);
                     }
                 }
 
@@ -139,9 +141,6 @@ public class SecretWatcher extends BaseWatcher {
         try {
             switch (action) {
             case ADDED:
-                if (!GlobalPluginConfiguration.get().isSecretWatch()) {
-                    return;
-                }
                 upsertCredential(secret);
                 break;
             case DELETED:

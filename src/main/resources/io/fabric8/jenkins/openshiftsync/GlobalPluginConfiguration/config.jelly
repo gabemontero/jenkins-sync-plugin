@@ -47,23 +47,27 @@
     </f:entry>
     <f:entry title="Build watch add event enabled" field="buildWatch"
              description="Check if we should process add build events">
-      <f:checkbox/>
+      <f:checkbox checked="false"/>
+    </f:entry>
+    <f:entry title="Reconcile deleted builds with deleted runs" field="reconcileBuildsRuns"
+             description="Delete runs associated with deleted builds in openshift">
+      <f:checkbox checked="false"/>
     </f:entry>
     <f:entry title="Build config watch add event enabled" field="buildConfigWatch"
              description="Check if we should process add build config events">
-      <f:checkbox/>
+      <f:checkbox checked="false"/>
     </f:entry>
     <f:entry title="Config map watch add event enabled" field="configMapWatch"
              description="Check if we should process add config map events">
-      <f:checkbox/>
+      <f:checkbox checked="false"/>
     </f:entry>
     <f:entry title="Image stream watch add event enabled" field="imageStreamWatch"
              description="Check if we should process add image stream events">
-      <f:checkbox/>
+      <f:checkbox checked="false"/>
     </f:entry>
     <f:entry title="Secret watch add event enabled" field="secretWatch"
              description="Check if we should process add secret events">
-      <f:checkbox/>
+      <f:checkbox checked="false"/>
     </f:entry>
     <f:entry title="Build list interval" field="buildListInterval"
              description="Time in seconds we list builds">

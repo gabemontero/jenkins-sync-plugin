@@ -74,32 +74,34 @@ public class ConfigMapWatcher extends BaseWatcher {
                     } catch (Exception e) {
                         logger.log(SEVERE, "Failed to load ConfigMaps: " + e, e);
                     }
-                    try {
-                        String resourceVersion = "0";
-                        if (configMaps == null) {
-                            logger.warning("Unable to get config map list; impacts resource version used for watch");
-                        } else {
-                            resourceVersion = configMaps.getMetadata()
-                                    .getResourceVersion();
-                        }
-                        synchronized(ConfigMapWatcher.this) {
-                            if (watches.get(namespace) == null) {
-                                logger.info("creating ConfigMap watch for namespace "
-                                        + namespace
-                                        + " and resource version "
-                                        + resourceVersion);
-                                watches.put(
-                                        namespace,
-                                        getAuthenticatedOpenShiftClient()
-                                        .configMaps()
-                                        .inNamespace(namespace)
-                                        .withResourceVersion(
-                                                resourceVersion)
-                                                .watch(new WatcherCallback<ConfigMap>(ConfigMapWatcher.this,namespace)));
+                    if (GlobalPluginConfiguration.get().isConfigMapWatch()) {
+                        try {
+                            String resourceVersion = "0";
+                            if (configMaps == null) {
+                                logger.warning("Unable to get config map list; impacts resource version used for watch");
+                            } else {
+                                resourceVersion = configMaps.getMetadata()
+                                        .getResourceVersion();
                             }
+                            synchronized(ConfigMapWatcher.this) {
+                                if (watches.get(namespace) == null) {
+                                    logger.info("creating ConfigMap watch for namespace "
+                                            + namespace
+                                            + " and resource version "
+                                            + resourceVersion);
+                                    watches.put(
+                                            namespace,
+                                            getAuthenticatedOpenShiftClient()
+                                            .configMaps()
+                                            .inNamespace(namespace)
+                                            .withResourceVersion(
+                                                    resourceVersion)
+                                                    .watch(new WatcherCallback<ConfigMap>(ConfigMapWatcher.this,namespace)));
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.log(SEVERE, "Failed to load ConfigMaps: " + e, e);
                         }
-                    } catch (Exception e) {
-                        logger.log(SEVERE, "Failed to load ConfigMaps: " + e, e);
                     }
                 }
             }
@@ -116,9 +118,6 @@ public class ConfigMapWatcher extends BaseWatcher {
         try {
             switch (action) {
             case ADDED:
-                if (!GlobalPluginConfiguration.get().isConfigMapWatch()) {
-                    return;
-                }
                 if (containsSlave(configMap)) {
                     List<PodTemplate> templates = podTemplatesFromConfigMap(configMap);
                     trackedConfigMaps.put(configMap.getMetadata().getUid(),

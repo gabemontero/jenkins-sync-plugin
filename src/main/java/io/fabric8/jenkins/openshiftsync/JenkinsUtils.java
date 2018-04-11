@@ -324,6 +324,7 @@ public class JenkinsUtils {
             break;
         case SERIAL:
             if (job.isInQueue() || job.isBuilding()) {
+            	LOGGER.info("GGM not triggering build " + build.getMetadata().getName() + " cause inqueue " + job.isInQueue() + " building " + job.isBuilding());
                 return false;
             }
             break;
@@ -336,6 +337,7 @@ public class JenkinsUtils {
                 .buildConfigs().inNamespace(namespace)
                 .withName(buildConfigName).get();
         if (buildConfig == null) {
+        	LOGGER.warning("could not find build config " + buildConfigName);
             return false;
         }
 
@@ -414,6 +416,7 @@ public class JenkinsUtils {
             }
             putJobWithBuildConfig(job, buildConfig);
 
+            LOGGER.info("GGMGGMGGM submitting build to jenkins: " + build.getMetadata().getName());
             if (job.scheduleBuild2(0,
                     buildActions.toArray(new Action[buildActions.size()])) != null) {
                 updateOpenShiftBuildPhase(build, PENDING);
@@ -608,6 +611,7 @@ public class JenkinsUtils {
 			return;
 		}
 		boolean isSerialLatestOnly = SERIAL_LATEST_ONLY.equals(buildConfigProjectProperty.getBuildRunPolicy());
+		LOGGER.info("GGM build serial policy latest only is " + isSerialLatestOnly);
 		if (isSerialLatestOnly) {
 			// Try to cancel any builds that haven't actually started, waiting
 			// for executor perhaps.
@@ -674,6 +678,7 @@ public class JenkinsUtils {
 			}
 		});
 		boolean isSerial = SERIAL.equals(buildConfigProjectProperty.getBuildRunPolicy());
+		LOGGER.info("GGM build serial policy is " + isSerial);
 		boolean jobIsBuilding = job.isBuilding();
 		for (int i = 0; i < builds.size(); i++) {
 			Build b = builds.get(i);
@@ -686,6 +691,7 @@ public class JenkinsUtils {
 				// first non-cancellation request so we do not try to
 				// queue a new build.
 				if (jobIsBuilding && !isCancelled(b.getStatus())) {
+					LOGGER.info("GGM job is running so not starting any new builds for now");
 					return;
 				}
 

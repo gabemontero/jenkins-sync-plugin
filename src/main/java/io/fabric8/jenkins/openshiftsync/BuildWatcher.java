@@ -120,38 +120,42 @@ public class BuildWatcher extends BaseWatcher {
                         logger.log(Level.SEVERE,
                                 "Failed to load initial Builds: " + e, e);
                     }
-                    try {
-                        String resourceVersion = "0";
-                        if (newBuilds == null) {
-                            logger.warning("Unable to get build list; impacts resource version used for watch");
-                        } else {
-                            resourceVersion = newBuilds.getMetadata()
-                                    .getResourceVersion();
-                        }
-                        synchronized(BuildWatcher.this) {
-                            if (watches.get(namespace) == null) {
-                                logger.info("creating Build watch for namespace "
-                                        + namespace
-                                        + " and resource version "
-                                        + resourceVersion);
-                                watches.put(
-                                        namespace,
-                                        getAuthenticatedOpenShiftClient()
-                                                .builds()
-                                                .inNamespace(namespace)
-                                                .withResourceVersion(
-                                                        resourceVersion)
-                                                .watch(new WatcherCallback<Build>(
-                                                        BuildWatcher.this,
-                                                        namespace)));
+                    if (GlobalPluginConfiguration.get().isBuildWatch()) {
+                        try {
+                            String resourceVersion = "0";
+                            if (newBuilds == null) {
+                                logger.warning("Unable to get build list; impacts resource version used for watch");
+                            } else {
+                                resourceVersion = newBuilds.getMetadata()
+                                        .getResourceVersion();
                             }
+                            synchronized(BuildWatcher.this) {
+                                if (watches.get(namespace) == null) {
+                                    logger.info("creating Build watch for namespace "
+                                            + namespace
+                                            + " and resource version "
+                                            + resourceVersion);
+                                    watches.put(
+                                            namespace,
+                                            getAuthenticatedOpenShiftClient()
+                                                    .builds()
+                                                    .inNamespace(namespace)
+                                                    .withResourceVersion(
+                                                            resourceVersion)
+                                                    .watch(new WatcherCallback<Build>(
+                                                            BuildWatcher.this,
+                                                            namespace)));
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.log(Level.SEVERE,
+                                    "Failed to load initial Builds: " + e, e);
                         }
-                    } catch (Exception e) {
-                        logger.log(Level.SEVERE,
-                                "Failed to load initial Builds: " + e, e);
                     }
                 }
-                reconcileRunsAndBuilds();
+                if (GlobalPluginConfiguration.get().isReconcileBuildsRuns()) {
+                	reconcileRunsAndBuilds();
+                }
             }
         };
     }
@@ -168,9 +172,6 @@ public class BuildWatcher extends BaseWatcher {
         try {
             switch (action) {
             case ADDED:
-                if (!GlobalPluginConfiguration.get().isBuildWatch()) {
-                    return;
-                }
                 addEventToJenkinsJobRun(build);
                 break;
             case MODIFIED:
@@ -280,6 +281,9 @@ public class BuildWatcher extends BaseWatcher {
                 }
                 bcBuilds.add(b);
             }
+            
+            logger.info("GGM num of listed builds resulted in these BC:" + buildConfigMap + " and will process this num of BC " + buildConfigBuildMap.size());
+            
 
             // Now handle the builds.
             for (Map.Entry<BuildConfig, List<Build>> buildConfigBuilds : buildConfigBuildMap
@@ -290,8 +294,10 @@ public class BuildWatcher extends BaseWatcher {
                     continue;
                 }
                 WorkflowJob job = getJobFromBuildConfig(bc);
+                logger.info("GGM for bc " + bc.getMetadata().getName() + " found job " + (job != null));
                 if (job == null) {
                     List<Build> builds = buildConfigBuilds.getValue();
+                    logger.info("GGM for bc " + bc.getMetadata().getName() + " will work on  " + builds.size() + " builds");
                     for (Build b : builds) {
                         logger.info("skipping listed new build "
                                 + b.getMetadata().getName()
@@ -339,6 +345,7 @@ public class BuildWatcher extends BaseWatcher {
         if (!OpenShiftUtils.isPipelineStrategyBuild(build))
             return false;
         BuildStatus status = build.getStatus();
+        logger.info("GGM considering starting build " + build.getMetadata().getName() + " current phase " + status.getPhase());
         if (status != null) {
             if (isCancelled(status)) {
                 updateOpenShiftBuildPhase(build, CANCELLED);
@@ -350,6 +357,7 @@ public class BuildWatcher extends BaseWatcher {
         }
 
         WorkflowJob job = getJobFromBuild(build);
+        logger.info("GGM job for build found " + (job != null));
         if (job != null) {
             return triggerJob(job, build);
         }

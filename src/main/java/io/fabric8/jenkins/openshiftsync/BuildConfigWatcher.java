@@ -118,21 +118,23 @@ public class BuildConfigWatcher extends BaseWatcher {
                     } catch (Exception e) {
                         logger.log(SEVERE, "Failed to load BuildConfigs: " + e, e);
                     }
-                    try {
-                        String resourceVersion = "0";
-                        if (buildConfigs == null) {
-                            logger.warning("Unable to get build config list; impacts resource version used for watch");
-                        } else {
-                            resourceVersion = buildConfigs.getMetadata().getResourceVersion();
-                        }
-                        synchronized(BuildConfigWatcher.this) {
-                            if (watches.get(namespace) == null) {
-                                logger.info("creating BuildConfig watch for namespace " + namespace + " and resource version " + resourceVersion);
-                                watches.put(namespace, getAuthenticatedOpenShiftClient().buildConfigs().inNamespace(namespace).withResourceVersion(resourceVersion).watch(new WatcherCallback<BuildConfig>(BuildConfigWatcher.this,namespace)));
+                    if (GlobalPluginConfiguration.get().isBuildConfigWatch()) {
+                        try {
+                            String resourceVersion = "0";
+                            if (buildConfigs == null) {
+                                logger.warning("Unable to get build config list; impacts resource version used for watch");
+                            } else {
+                                resourceVersion = buildConfigs.getMetadata().getResourceVersion();
                             }
+                            synchronized(BuildConfigWatcher.this) {
+                                if (watches.get(namespace) == null) {
+                                    logger.info("creating BuildConfig watch for namespace " + namespace + " and resource version " + resourceVersion);
+                                    watches.put(namespace, getAuthenticatedOpenShiftClient().buildConfigs().inNamespace(namespace).withResourceVersion(resourceVersion).watch(new WatcherCallback<BuildConfig>(BuildConfigWatcher.this,namespace)));
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.log(SEVERE, "Failed to load BuildConfigs: " + e, e);
                         }
-                    } catch (Exception e) {
-                        logger.log(SEVERE, "Failed to load BuildConfigs: " + e, e);
                     }
                 }
                 // poke the BuildWatcher builds with no BC list and see if we
@@ -170,9 +172,6 @@ public class BuildConfigWatcher extends BaseWatcher {
         try {
             switch (action) {
             case ADDED:
-                if (!GlobalPluginConfiguration.get().isBuildConfigWatch()) {
-                    return;
-                }
                 upsertJob(buildConfig);
                 break;
             case DELETED:

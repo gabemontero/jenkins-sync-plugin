@@ -63,11 +63,13 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
     private int configMapListInterval = 300;
     private int imageStreamListInterval = 300;
     
-    private boolean buildWatch = true;
-    private boolean buildConfigWatch = true;
-    private boolean secretWatch = true;
-    private boolean configMapWatch = true;
-    private boolean imageStreamWatch = true;
+    private boolean buildWatch = false;
+    private boolean buildConfigWatch = false;
+    private boolean secretWatch = false;
+    private boolean configMapWatch = false;
+    private boolean imageStreamWatch = false;
+    
+    private boolean reconcileBuildsRuns = false;
     
 	private transient BuildWatcher buildWatcher;
 
@@ -85,7 +87,7 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 			int buildListInterval, int buildConfigListInterval, int configMapListInterval,
 			int secretListInterval, int imageStreamListInterval,
 			boolean buildWatch, boolean buildConfigWatch, boolean configMapWatch,
-			boolean secretWatch, boolean imageStreamWatch) {
+			boolean secretWatch, boolean imageStreamWatch, boolean reconcileBuildsRuns) {
 		this.enabled = enable;
 		this.server = server;
 		this.namespaces = StringUtils.isBlank(namespace) ? null : namespace.split(" ");
@@ -103,6 +105,7 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 		this.configMapWatch = configMapWatch;
 		this.secretWatch = secretWatch;
 		this.imageStreamWatch = imageStreamWatch;
+		this.reconcileBuildsRuns = reconcileBuildsRuns;
 		configChange();
 	}
 
@@ -125,7 +128,7 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 	public boolean configure(StaplerRequest req, JSONObject json) throws hudson.model.Descriptor.FormException {
 		req.bindJSON(this, json);
 		configChange();
-		logger.info("GGM bl " + this.buildListInterval + " bw " + this.buildWatch);
+		logger.info("GGM configure bl " + this.buildListInterval + " bw " + this.buildWatch);
 		save();
 		return true;
 	}
@@ -234,6 +237,14 @@ public class GlobalPluginConfiguration extends GlobalConfiguration {
 
     public void setBuildWatch(boolean buildWatch) {
         this.buildWatch = buildWatch;
+    }
+
+    public boolean isReconcileBuildsRuns() {
+        return reconcileBuildsRuns;
+    }
+
+    public void setReconcileBuildsRuns(boolean reconcileBuildsRuns) {
+        this.reconcileBuildsRuns = reconcileBuildsRuns;
     }
 
     public boolean isBuildConfigWatch() {

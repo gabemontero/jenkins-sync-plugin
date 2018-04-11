@@ -73,34 +73,36 @@ public class ImageStreamWatcher extends BaseWatcher {
                         logger.log(SEVERE, "Failed to load ImageStreams: " + e,
                                 e);
                     }
-                    try {
-                        String resourceVersion = "0";
-                        if (imageStreams == null) {
-                            logger.warning("Unable to get image stream list; impacts resource version used for watch");
-                        } else {
-                            resourceVersion = imageStreams.getMetadata()
-                                    .getResourceVersion();
-                        }
-                        synchronized(ImageStreamWatcher.this) {
-                            if (watches.get(namespace) == null) {
-                                logger.info("creating ImageStream watch for namespace "
-                                        + namespace
-                                        + " and resource version "
-                                        + resourceVersion);
-                                watches.put(
-                                        namespace,
-                                        getAuthenticatedOpenShiftClient()
-                                                .imageStreams()
-                                                .inNamespace(namespace)
-                                                .withResourceVersion(
-                                                        resourceVersion)
-                                                        .watch(new WatcherCallback<ImageStream>(ImageStreamWatcher.this,
-                                                                namespace)));
+                    if (GlobalPluginConfiguration.get().isImageStreamWatch()) {
+                        try {
+                            String resourceVersion = "0";
+                            if (imageStreams == null) {
+                                logger.warning("Unable to get image stream list; impacts resource version used for watch");
+                            } else {
+                                resourceVersion = imageStreams.getMetadata()
+                                        .getResourceVersion();
                             }
+                            synchronized(ImageStreamWatcher.this) {
+                                if (watches.get(namespace) == null) {
+                                    logger.info("creating ImageStream watch for namespace "
+                                            + namespace
+                                            + " and resource version "
+                                            + resourceVersion);
+                                    watches.put(
+                                            namespace,
+                                            getAuthenticatedOpenShiftClient()
+                                                    .imageStreams()
+                                                    .inNamespace(namespace)
+                                                    .withResourceVersion(
+                                                            resourceVersion)
+                                                            .watch(new WatcherCallback<ImageStream>(ImageStreamWatcher.this,
+                                                                    namespace)));
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.log(SEVERE, "Failed to load ImageStreams: " + e,
+                                    e);
                         }
-                    } catch (Exception e) {
-                        logger.log(SEVERE, "Failed to load ImageStreams: " + e,
-                                e);
                     }
                 }
             }
@@ -119,9 +121,6 @@ public class ImageStreamWatcher extends BaseWatcher {
             String isname = imageStream.getMetadata().getName();
             switch (action) {
             case ADDED:
-                if (!GlobalPluginConfiguration.get().isImageStreamWatch()) {
-                    return;
-                }
                 for (PodTemplate entry : slavesFromIS) {
                     // timer might beat watch event - put call is technically
                     // fine, but
